@@ -42,6 +42,7 @@ const defaultSession = {
   isSelenium: false,
   proxy: "",
   solveCaptcha: false,
+  manualSolveCaptcha: false,
 };
 
 export class SessionService {
@@ -79,6 +80,7 @@ export class SessionService {
     sessionId?: string;
     proxyUrl?: string;
     userAgent?: string;
+    manualSolveCaptcha?: boolean;
     sessionContext?: {
       cookies?: CookieData[];
       localStorage?: Record<string, Record<string, any>>;
@@ -95,6 +97,7 @@ export class SessionService {
       sessionId,
       proxyUrl,
       userAgent,
+      manualSolveCaptcha,
       sessionContext,
       extensions,
       logSinkUrl,
@@ -170,6 +173,7 @@ export class SessionService {
       },
       sessionContext,
       userAgent,
+      manualSolveCaptcha,
       blockAds,
       extensions: extensions || [],
       logSinkUrl,

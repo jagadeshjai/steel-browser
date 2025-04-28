@@ -7,6 +7,7 @@ const CreateSession = z.object({
   sessionId: z.string().uuid().optional().describe("Unique identifier for the session"),
   proxyUrl: z.string().optional().describe("Proxy URL to use for the session"),
   userAgent: z.string().optional().describe("User agent string to use for the session"),
+  manualSolveCaptcha: z.boolean().optional().default(false).describe("Indicate if manual captcha solving is enabled"),
   sessionContext: SessionContextSchema.optional().describe("Session context data to be used in the created session"),
   isSelenium: z.boolean().optional().describe("Indicates if Selenium is used in the session"),
   blockAds: z.boolean().optional().describe("Flag to indicate if ads should be blocked in the session"),
@@ -98,6 +99,15 @@ const SessionStreamResponse = z.string().describe("HTML content for the session 
 
 const MultipleSessions = z.array(SessionDetails);
 
+const solveCaptchaResponse = z
+  .object({
+    success: z.boolean().describe("Indicates if the captcha solving was successfully initiated"),
+    message: z.string().describe("Details about the captcha solving initiation"),
+    taskId: z.string().optional().describe("ID to track the asynchronous captcha solving task"),
+    pageId: z.string().optional().describe("ID of the page to solve the captcha on"),
+  })
+  .describe("Response for initiating an asynchronous captcha solve operation.");
+
 export type SessionsScrapeRequestBody = Omit<ScrapeRequestBody, "url">;
 export type SessionsScrapeRequest = FastifyRequest<{ Body: SessionsScrapeRequestBody }>;
 
@@ -126,6 +136,7 @@ export const browserSchemas = {
   SessionStreamQuery,
   SessionStreamResponse,
   SessionLiveDetailsResponse,
+  solveCaptchaResponse,
 };
 
 export default browserSchemas;

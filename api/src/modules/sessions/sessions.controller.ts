@@ -15,6 +15,7 @@ export const handleLaunchBrowserSession = async (
       sessionId,
       proxyUrl,
       userAgent,
+      manualSolveCaptcha,
       sessionContext,
       extensions,
       logSinkUrl,
@@ -29,6 +30,7 @@ export const handleLaunchBrowserSession = async (
       sessionId,
       proxyUrl,
       userAgent,
+      manualSolveCaptcha,
       sessionContext: sessionContext as {
         cookies?: CookieData[] | undefined;
         localStorage?: Record<string, Record<string, any>> | undefined;
@@ -214,6 +216,151 @@ export const handleGetSessionLiveDetails = async (
     return reply.code(500).send({
       message: "Failed to get session state",
       error: getErrors(error),
+    });
+  }
+};
+
+export const handleInitiateCaptchaSolve = async (
+  server: FastifyInstance,
+  request: FastifyRequest<{
+    Body: {
+      taskId: string;
+      pageId?: string; // Optional pageId parameter
+    };
+  }>,
+  reply: FastifyReply,
+) => {
+  try {
+    const { taskId, pageId } = request.body;
+    if (!taskId) {
+      return reply.code(400).send({
+        message: "Missing taskId",
+        success: false,
+      });
+    }
+
+    server.log.info(`Initiating captcha solve via event trigger for taskId: ${taskId}, pageId: ${pageId || "default"}`);
+
+    // Get active page
+    const pages = await server.cdpService.getAllPages();
+    if (!pages.length) {
+      server.log.error("No active pages found for captcha solving");
+      return reply.code(404).send({
+        message: "No active pages found",
+        success: false,
+      });
+    }
+
+    // Default to the first page if pageId is not provided or not found
+    let page = pages[0];
+    //@ts-ignore
+    let targetPageId = page.target()._targetId; // Get ID of the default page
+
+    if (pageId) {
+      //@ts-ignore
+      const specifiedPage = pages.find((p) => p.target()._targetId === pageId);
+      if (specifiedPage) {
+        page = specifiedPage;
+        targetPageId = pageId; // Use the specified page ID
+        server.log.info(`Using specified page with ID: ${pageId} for captcha solving`);
+      } else {
+        server.log.warn(`Page with ID ${pageId} not found, using default page (first page) with ID: ${targetPageId}`);
+      }
+    } else {
+      server.log.info(`Using default page (first page) with ID: ${targetPageId} for captcha solving`);
+    }
+
+    // Check if page is valid
+    if (!page) {
+      server.log.error("Selected page is invalid");
+      return reply.code(500).send({
+        message: "Invalid page selected for captcha solving",
+        success: false,
+      });
+    }
+
+    server.log.info(
+      `Attempting to trigger and listen for captcha result on page URL: ${page.url()} for taskId: ${taskId}`,
+    );
+
+    // Use page.evaluate to dispatch event and listen for result
+    const captchaResult = await page.evaluate(
+      (taskIdToSolve, timeoutMs) => {
+        return new Promise((resolve, reject) => {
+          let timeoutId: NodeJS.Timeout | null = null;
+
+          const listener = (event: CustomEvent) => {
+            console.log("[CAPTCHA-DEBUG] Received CAPTCHA_SOLVER_RESULT event:", event.detail);
+            if (event.detail && event.detail.externalTriggerId === taskIdToSolve) {
+              if (timeoutId) clearTimeout(timeoutId);
+
+              //@ts-ignore
+              window.removeEventListener("CAPTCHA_SOLVER_RESULT", listener);
+              console.log(`[CAPTCHA-DEBUG] Matching result found for taskId: ${taskIdToSolve}`);
+              resolve(event.detail);
+            } else {
+              console.log(`[CAPTCHA-DEBUG] Ignoring result for different taskId: ${event.detail?.externalTriggerId}`);
+            }
+          };
+
+          timeoutId = setTimeout(() => {
+            //@ts-ignore
+            window.removeEventListener("CAPTCHA_SOLVER_RESULT", listener);
+            console.error(`[CAPTCHA-DEBUG] Timeout waiting for CAPTCHA_SOLVER_RESULT for taskId: ${taskIdToSolve}`);
+            reject(new Error(`Timeout waiting for CAPTCHA_SOLVER_RESULT event for taskId ${taskIdToSolve}`));
+          }, timeoutMs);
+
+          //@ts-ignore
+          window.addEventListener("CAPTCHA_SOLVER_RESULT", listener);
+          console.log(`[CAPTCHA-DEBUG] Added listener for CAPTCHA_SOLVER_RESULT, taskId: ${taskIdToSolve}`);
+
+          // Dispatch the trigger event
+          const triggerEvent = new CustomEvent("TRIGGER_CAPTCHA_SOLVER", {
+            detail: {
+              externalTriggerId: taskIdToSolve,
+            },
+          });
+          console.log(`[CAPTCHA-DEBUG] Dispatching TRIGGER_CAPTCHA_SOLVER event for taskId: ${taskIdToSolve}`);
+          window.dispatchEvent(triggerEvent);
+        });
+      },
+      taskId,
+      360000, // 6 min timeout
+    );
+
+    server.log.info(`Received captcha result for task ${taskId}:`, captchaResult);
+
+    return reply.send({
+      success: true, // Indicate the API call itself succeeded
+      message: "Captcha solving process initiated and result received.",
+      taskId: taskId,
+      pageId: targetPageId, // Return the ID of the page used
+      result: captchaResult, // Include the actual result from the event
+    });
+  } catch (error) {
+    server.log.error(`Error during captcha solve process: ${getErrors(error)}`);
+    // Check if the error is a timeout error from evaluate
+    if (error instanceof Error && error.message.includes("Timeout waiting for CAPTCHA_SOLVER_RESULT")) {
+      return reply.code(408).send({
+        // Request Timeout
+        message: "Captcha solving timed out.",
+        error: error.message,
+        success: false,
+      });
+    }
+    // Check for navigation errors which might interrupt evaluate
+    if (error instanceof Error && error.message.includes("Navigation interrupted")) {
+      return reply.code(503).send({
+        // Service Unavailable (page navigated away)
+        message: "Page navigation interrupted the captcha solving process.",
+        error: error.message,
+        success: false,
+      });
+    }
+    return reply.code(500).send({
+      message: "Failed to complete captcha solving process.",
+      error: getErrors(error),
+      success: false,
     });
   }
 };

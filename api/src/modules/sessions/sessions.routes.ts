@@ -7,6 +7,7 @@ import {
   handleGetSessions,
   handleGetSessionStream,
   handleGetSessionLiveDetails,
+  handleInitiateCaptchaSolve,
 } from "./sessions.controller.js";
 import { handleScrape, handleScreenshot, handlePDF } from "../actions/actions.controller.js";
 import { $ref } from "../../plugins/schemas.js";
@@ -187,6 +188,23 @@ async function routes(server: FastifyInstance) {
     },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) =>
       handleGetSessionLiveDetails(server, request, reply),
+  );
+
+  server.post(
+    "/sessions/:sessionId/initiate-solve-captcha",
+    {
+      schema: {
+        operationId: "initiate_captcha_solve",
+        description: "Initiate captcha solving for a session",
+        tags: ["Sessions"],
+        summary: "Initiate captcha solving for a session and return the status",
+        response: {
+          200: $ref("solveCaptchaResponse"),
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { taskId: string; pageId?: string } }>, reply: FastifyReply) =>
+      handleInitiateCaptchaSolve(server, request, reply),
   );
 
   server.post(
