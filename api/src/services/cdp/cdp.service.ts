@@ -106,6 +106,72 @@ export class CDPService extends EventEmitter {
     return this.browserInstance?.process() !== null;
   }
 
+  /**
+   * Configures a newly created page with initial settings
+   * This only runs once per browser instance
+   */
+  private async runOnFirstRun(page: Page, manualSolveCaptcha: boolean) {
+    this.logger.info(`On first run  -  ${manualSolveCaptcha}   \n\n\n`);
+
+    try {
+      // Check if manualSolveCaptcha is enabled in the launch config
+      // if (this.launchConfig?.manualSolveCaptcha) {
+      if (manualSolveCaptcha) {
+        this.logger.info("Setting up manual captcha solving mode");
+
+        // Execute in the page context to communicate with the extension
+        await page.evaluate(() => {
+          return new Promise((resolve) => {
+            let timeoutId: number;
+
+            // Listen for the response from the extension
+            window.addEventListener(
+              "EX_SCS_SET_CONFIG_RESPONSE",
+              (event: any) => {
+                const detail = event.detail;
+
+                // Clear the timeout since we received a response
+                if (timeoutId) {
+                  clearTimeout(timeoutId);
+                }
+
+                // If the extension successfully applied the configuration
+                if (detail && detail.success && detail.action === "SET_MANUAL_MODE") {
+                  console.log("[CDP Service] Successfully enabled manual captcha solving mode");
+                  resolve(true);
+                } else {
+                  console.warn("Failed to enable manual captcha solving mode", detail);
+                  resolve(false);
+                }
+              },
+              { once: true },
+            );
+
+            // Dispatch the event to configure the extension
+            window.dispatchEvent(
+              new CustomEvent("EX_SCS_SET_CONFIG", {
+                detail: {
+                  action: "SET_MANUAL_MODE",
+                  value: true,
+                },
+              }),
+            );
+
+            // Set a timeout in case the extension doesn't respond
+            timeoutId = window.setTimeout(() => {
+              console.warn("Timeout waiting for manual captcha mode configuration response");
+              resolve(false);
+            }, 10000);
+          });
+        });
+
+        this.logger.info("Manual captcha solving mode setup completed");
+      }
+    } catch (error) {
+      this.logger.error(`Error in runOnFirstRun: ${error}`);
+    }
+  }
+
   public getTargetId(page: Page) {
     //@ts-ignore
     return page.target()._targetId;
@@ -492,7 +558,7 @@ export class CDPService extends EventEmitter {
     this.launchConfig = config || this.defaultLaunchConfig;
     this.logger.info("[CDPService] Launching new browser instance.");
 
-    const { options, userAgent, userDataDir } = this.launchConfig;
+    const { options, userAgent, manualSolveCaptcha, userDataDir } = this.launchConfig;
 
     const fingerprintGen = new FingerprintGenerator({
       devices: ["desktop"],
@@ -594,6 +660,8 @@ export class CDPService extends EventEmitter {
 
     await this.handleNewTarget(this.primaryPage.target());
     await this.handleTargetChange(this.primaryPage.target());
+
+    this.runOnFirstRun(this.primaryPage, manualSolveCaptcha ?? false);
 
     return this.browserInstance;
   }
