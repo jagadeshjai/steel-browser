@@ -27,6 +27,17 @@ import { SessionData } from "../context/types.js";
 import { PluginManager } from "./plugins/core/plugin-manager.js";
 import { CDPLifecycle } from "../cdp-lifecycle.service.js";
 
+// Declare chrome runtime API type
+declare global {
+  interface Window {
+    chrome: {
+      runtime: {
+        sendMessage: (extensionId: string, message: any) => Promise<any>;
+      };
+    };
+  }
+}
+
 export class CDPService extends EventEmitter {
   private logger: FastifyBaseLogger;
   private keepAlive: boolean;
@@ -111,61 +122,48 @@ export class CDPService extends EventEmitter {
    * This only runs once per browser instance
    */
   private async runOnFirstRun(page: Page, manualSolveCaptcha: boolean) {
-    this.logger.info(`On first run  -  ${manualSolveCaptcha}   \n\n\n`);
+    this.logger.info(`On first run - Manual Captcha Mode: ${manualSolveCaptcha}`);
 
     try {
-      // Check if manualSolveCaptcha is enabled in the launch config
-      // if (this.launchConfig?.manualSolveCaptcha) {
       if (manualSolveCaptcha) {
-        this.logger.info("Setting up manual captcha solving mode");
-
+        this.logger.info("Setting up manual captcha solving mode via chrome.runtime.sendMessage");
         // Execute in the page context to communicate with the extension
-        await page.evaluate(() => {
-          return new Promise((resolve) => {
-            let timeoutId: number;
+        const success = await page.evaluate((extensionId) => {
+          return new Promise<boolean>(async (resolve) => {
+            if (typeof window.chrome === "undefined" || !window.chrome.runtime || !window.chrome.runtime.sendMessage) {
+              console.error("[CDP Service] window.chrome.runtime.sendMessage is not available.");
+              return resolve(false);
+            }
 
-            // Listen for the response from the extension
-            window.addEventListener(
-              "EX_SCS_SET_CONFIG_RESPONSE",
-              (event: any) => {
-                const detail = event.detail;
+            const message = {
+              type: "SAVE_SETTINGS",
+              settings: { globalManualMode: true },
+            };
 
-                // Clear the timeout since we received a response
-                if (timeoutId) {
-                  clearTimeout(timeoutId);
-                }
+            console.log(`[CDP Service] Sending message to extension ${extensionId}:`, message);
 
-                // If the extension successfully applied the configuration
-                if (detail && detail.success && detail.action === "SET_MANUAL_MODE") {
-                  console.log("[CDP Service] Successfully enabled manual captcha solving mode");
-                  resolve(true);
-                } else {
-                  console.warn("Failed to enable manual captcha solving mode", detail);
-                  resolve(false);
-                }
-              },
-              { once: true },
-            );
-
-            // Dispatch the event to configure the extension
-            window.dispatchEvent(
-              new CustomEvent("EX_SCS_SET_CONFIG", {
-                detail: {
-                  action: "SET_MANUAL_MODE",
-                  value: true,
-                },
-              }),
-            );
-
-            // Set a timeout in case the extension doesn't respond
-            timeoutId = window.setTimeout(() => {
-              console.warn("Timeout waiting for manual captcha mode configuration response");
+            try {
+              // Send message and wait for potential response/completion
+              // The promise resolves when the message is sent,
+              // or after the response callback executes if one is provided by the extension.
+              await window.chrome.runtime.sendMessage(extensionId, message);
+              console.log("[CDP Service] Successfully sent message to enable manual captcha solving mode.");
+              resolve(true);
+            } catch (error: any) {
+              console.error(
+                "[CDP Service] Failed to send message to enable manual captcha solving mode:",
+                error.message,
+              );
               resolve(false);
-            }, 10000);
+            }
           });
-        });
+        }, "dcpbcggodkeoaeafplnkffjhppkgbehm");
 
-        this.logger.info("Manual captcha solving mode setup completed");
+        if (success) {
+          this.logger.info("Manual captcha solving mode setup message sent successfully.");
+        } else {
+          this.logger.warn("Failed to send manual captcha solving mode setup message.");
+        }
       }
     } catch (error) {
       this.logger.error(`Error in runOnFirstRun: ${error}`);
@@ -661,7 +659,7 @@ export class CDPService extends EventEmitter {
     await this.handleNewTarget(this.primaryPage.target());
     await this.handleTargetChange(this.primaryPage.target());
 
-    this.runOnFirstRun(this.primaryPage, manualSolveCaptcha ?? false);
+    await this.runOnFirstRun(this.primaryPage, this.launchConfig?.manualSolveCaptcha ?? false);
 
     return this.browserInstance;
   }
