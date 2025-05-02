@@ -230,16 +230,18 @@ export const handleInitiateCaptchaSolve = async (
   }>,
   reply: FastifyReply,
 ) => {
-  try {
-    const { taskId, pageId } = request.body;
-    if (!taskId) {
-      return reply.code(400).send({
-        message: "Missing taskId",
-        success: false,
-      });
-    }
+  const { taskId, pageId } = request.body;
+  if (!taskId) {
+    return reply.code(400).send({
+      message: "Missing taskId",
+      success: false,
+    });
+  }
 
-    server.log.info(`Initiating captcha solve via event trigger for taskId: ${taskId}, pageId: ${pageId || "default"}`);
+  try {
+    server.log.debug(
+      `Initiating captcha solve via event trigger for taskId: ${taskId}, pageId: ${pageId || "default"}`,
+    );
 
     // Get active page
     const pages = await server.cdpService.getAllPages();
@@ -283,19 +285,26 @@ export const handleInitiateCaptchaSolve = async (
       `Attempting to trigger and listen for captcha result on page URL: ${page.url()} for taskId: ${taskId}`,
     );
 
+    interface CaptchaResult {
+      success: boolean;
+      token: string;
+      captchaType: string;
+      externalTriggerId: string;
+    }
+
     // Use page.evaluate to dispatch event and listen for result
     const captchaResult = await page.evaluate(
       (taskIdToSolve, timeoutMs) => {
-        return new Promise((resolve, reject) => {
+        return new Promise<CaptchaResult>((resolve, reject) => {
           let timeoutId: NodeJS.Timeout | null = null;
 
           const listener = (event: CustomEvent) => {
-            console.log("[CAPTCHA-DEBUG] Received CAPTCHA_SOLVER_RESULT event:", event.detail);
+            console.log("[CAPTCHA-DEBUG] Received EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE event:", event.detail);
             if (event.detail && event.detail.externalTriggerId === taskIdToSolve) {
               if (timeoutId) clearTimeout(timeoutId);
 
               //@ts-ignore
-              window.removeEventListener("CAPTCHA_SOLVER_RESULT", listener);
+              window.removeEventListener("EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE", listener);
               console.log(`[CAPTCHA-DEBUG] Matching result found for taskId: ${taskIdToSolve}`);
               resolve(event.detail);
             } else {
@@ -305,22 +314,28 @@ export const handleInitiateCaptchaSolve = async (
 
           timeoutId = setTimeout(() => {
             //@ts-ignore
-            window.removeEventListener("CAPTCHA_SOLVER_RESULT", listener);
-            console.error(`[CAPTCHA-DEBUG] Timeout waiting for CAPTCHA_SOLVER_RESULT for taskId: ${taskIdToSolve}`);
-            reject(new Error(`Timeout waiting for CAPTCHA_SOLVER_RESULT event for taskId ${taskIdToSolve}`));
+            window.removeEventListener("EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE", listener);
+            console.error(
+              `[CAPTCHA-DEBUG] Timeout waiting for EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE for taskId: ${taskIdToSolve}`,
+            );
+            reject(
+              new Error(`Timeout waiting for EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE event for taskId ${taskIdToSolve}`),
+            );
           }, timeoutMs);
 
           //@ts-ignore
-          window.addEventListener("CAPTCHA_SOLVER_RESULT", listener);
-          console.log(`[CAPTCHA-DEBUG] Added listener for CAPTCHA_SOLVER_RESULT, taskId: ${taskIdToSolve}`);
+          window.addEventListener("EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE", listener);
+          console.log(
+            `[CAPTCHA-DEBUG] Added listener for EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE, taskId: ${taskIdToSolve}`,
+          );
 
           // Dispatch the trigger event
-          const triggerEvent = new CustomEvent("TRIGGER_CAPTCHA_SOLVER", {
+          const triggerEvent = new CustomEvent("EX_SCS_TRIGGER_MANUAL_SOLVER", {
             detail: {
               externalTriggerId: taskIdToSolve,
             },
           });
-          console.log(`[CAPTCHA-DEBUG] Dispatching TRIGGER_CAPTCHA_SOLVER event for taskId: ${taskIdToSolve}`);
+          console.log(`[CAPTCHA-DEBUG] Dispatching EX_SCS_TRIGGER_MANUAL_SOLVER event for taskId: ${taskIdToSolve}`);
           window.dispatchEvent(triggerEvent);
         });
       },
@@ -328,19 +343,18 @@ export const handleInitiateCaptchaSolve = async (
       360000, // 6 min timeout
     );
 
-    server.log.info(`Received captcha result for task ${taskId}:`, captchaResult);
+    server.log.info(`Received captcha result for task ${taskId}: ${captchaResult}`);
 
     return reply.send({
-      success: true, // Indicate the API call itself succeeded
+      success: captchaResult.success,
       message: "Captcha solving process initiated and result received.",
       taskId: taskId,
       pageId: targetPageId, // Return the ID of the page used
-      result: captchaResult, // Include the actual result from the event
     });
   } catch (error) {
     server.log.error(`Error during captcha solve process: ${getErrors(error)}`);
     // Check if the error is a timeout error from evaluate
-    if (error instanceof Error && error.message.includes("Timeout waiting for CAPTCHA_SOLVER_RESULT")) {
+    if (error instanceof Error && error.message.includes("Timeout waiting for EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE")) {
       return reply.code(408).send({
         // Request Timeout
         message: "Captcha solving timed out.",

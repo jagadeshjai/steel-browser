@@ -157,7 +157,7 @@ export class CDPService extends EventEmitter {
               resolve(false);
             }
           });
-        }, "dcpbcggodkeoaeafplnkffjhppkgbehm");
+        }, "cacoogfbfjanjcbgpbokjnfkgnpndmgk");
 
         if (success) {
           this.logger.info("Manual captcha solving mode setup message sent successfully.");
