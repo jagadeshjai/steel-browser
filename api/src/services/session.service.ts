@@ -42,7 +42,7 @@ const defaultSession = {
   isSelenium: false,
   proxy: "",
   solveCaptcha: false,
-  manualSolveCaptcha: false,
+  solveCaptchaManually: false,
 };
 
 interface CaptchaTaskState {
@@ -95,7 +95,7 @@ export class SessionService {
     sessionId?: string;
     proxyUrl?: string;
     userAgent?: string;
-    manualSolveCaptcha?: boolean;
+    solveCaptchaManually?: boolean;
     sessionContext?: {
       cookies?: CookieData[];
       localStorage?: Record<string, Record<string, any>>;
@@ -112,7 +112,7 @@ export class SessionService {
       sessionId,
       proxyUrl,
       userAgent,
-      manualSolveCaptcha,
+      solveCaptchaManually,
       sessionContext,
       extensions,
       logSinkUrl,
@@ -188,7 +188,7 @@ export class SessionService {
       },
       sessionContext,
       userAgent,
-      manualSolveCaptcha,
+      solveCaptchaManually,
       blockAds,
       extensions: extensions || [],
       logSinkUrl,
@@ -329,8 +329,6 @@ export class SessionService {
     task.timeTaken = data.result.time_taken;
     task.result = data.result;
     task.error = data.error;
-
-    this.logger.info(`Updating captcha task ${taskId} to status: ${finalStatus}`);
 
     if (finalStatus === "success") {
       task.resolve(task.result);

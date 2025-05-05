@@ -192,7 +192,7 @@ async function routes(server: FastifyInstance) {
   );
 
   server.post(
-    "/sessions/:sessionId/initiate-solve-captcha",
+    "/sessions/:sessionId/captcha",
     {
       schema: {
         operationId: "initiate_captcha_solve",
@@ -209,7 +209,7 @@ async function routes(server: FastifyInstance) {
   );
 
   server.get(
-    "/sessions/:sessionId/captcha-status/:taskId",
+    "/sessions/:sessionId/captcha/:taskId",
     {
       schema: {
         operationId: "get_captcha_solving_status",

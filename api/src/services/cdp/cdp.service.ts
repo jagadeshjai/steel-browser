@@ -121,17 +121,14 @@ export class CDPService extends EventEmitter {
    * Configures a newly created page with initial settings
    * This only runs once per browser instance
    */
-  private async runOnFirstRun(page: Page, manualSolveCaptcha: boolean) {
-    this.logger.info(`On first run - Manual Captcha Mode: ${manualSolveCaptcha}`);
-
+  private async runOnFirstRun(page: Page, solveCaptchaManually: boolean) {
     try {
-      if (manualSolveCaptcha) {
-        this.logger.info("Setting up manual captcha solving mode via chrome.runtime.sendMessage");
+      if (solveCaptchaManually) {
         // Execute in the page context to communicate with the extension
         const success = await page.evaluate((extensionId) => {
           return new Promise<boolean>(async (resolve) => {
             if (typeof window.chrome === "undefined" || !window.chrome.runtime || !window.chrome.runtime.sendMessage) {
-              console.error("[CDP Service] window.chrome.runtime.sendMessage is not available.");
+              console.error("[CDPService] window.chrome.runtime.sendMessage is not available.");
               return resolve(false);
             }
 
@@ -140,18 +137,13 @@ export class CDPService extends EventEmitter {
               settings: { globalManualMode: true },
             };
 
-            console.log(`[CDP Service] Sending message to extension ${extensionId}:`, message);
-
             try {
               // Send message and wait for potential response/completion
-              // The promise resolves when the message is sent,
-              // or after the response callback executes if one is provided by the extension.
               await window.chrome.runtime.sendMessage(extensionId, message);
-              console.log("[CDP Service] Successfully sent message to enable manual captcha solving mode.");
               resolve(true);
             } catch (error: any) {
               console.error(
-                "[CDP Service] Failed to send message to enable manual captcha solving mode:",
+                "[CDPService] Failed to send message to enable manual captcha solving mode:",
                 error.message,
               );
               resolve(false);
@@ -556,7 +548,7 @@ export class CDPService extends EventEmitter {
     this.launchConfig = config || this.defaultLaunchConfig;
     this.logger.info("[CDPService] Launching new browser instance.");
 
-    const { options, userAgent, manualSolveCaptcha, userDataDir } = this.launchConfig;
+    const { options, userAgent, solveCaptchaManually, userDataDir } = this.launchConfig;
 
     const fingerprintGen = new FingerprintGenerator({
       devices: ["desktop"],
@@ -659,7 +651,7 @@ export class CDPService extends EventEmitter {
     await this.handleNewTarget(this.primaryPage.target());
     await this.handleTargetChange(this.primaryPage.target());
 
-    await this.runOnFirstRun(this.primaryPage, this.launchConfig?.manualSolveCaptcha ?? false);
+    await this.runOnFirstRun(this.primaryPage, solveCaptchaManually ?? false);
 
     return this.browserInstance;
   }

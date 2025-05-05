@@ -12,7 +12,7 @@ export interface BrowserLauncherOptions {
     indexedDB?: Record<string, IndexedDBDatabase[]>;
   };
   userAgent?: string;
-  manualSolveCaptcha?: boolean;
+  solveCaptchaManually?: boolean;
   extensions?: string[];
   logSinkUrl?: string;
   blockAds?: boolean;

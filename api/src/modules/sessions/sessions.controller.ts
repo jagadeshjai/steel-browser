@@ -15,7 +15,7 @@ export const handleLaunchBrowserSession = async (
       sessionId,
       proxyUrl,
       userAgent,
-      manualSolveCaptcha,
+      solveCaptchaManually,
       sessionContext,
       extensions,
       logSinkUrl,
@@ -30,7 +30,7 @@ export const handleLaunchBrowserSession = async (
       sessionId,
       proxyUrl,
       userAgent,
-      manualSolveCaptcha,
+      solveCaptchaManually,
       sessionContext: sessionContext as {
         cookies?: CookieData[] | undefined;
         localStorage?: Record<string, Record<string, any>> | undefined;
@@ -230,14 +230,12 @@ export const handleInitiateCaptchaSolve = async (
   }>,
   reply: FastifyReply,
 ) => {
-  const { pageId } = request.body;
-  const taskId = request.body.taskId;
+  const { taskId, pageId } = request.body;
 
   try {
     // Get active page
     const pages = await server.cdpService.getAllPages();
     if (!pages.length) {
-      server.log.error("No active pages found for captcha solving");
       return reply.code(404).send({
         message: "No active pages found",
         success: false,
@@ -255,17 +253,11 @@ export const handleInitiateCaptchaSolve = async (
       if (specifiedPage) {
         page = specifiedPage;
         targetPageId = pageId; // Use the specified page ID
-        server.log.info(`Using specified page with ID: ${pageId} for captcha solving`);
-      } else {
-        server.log.warn(`Page with ID ${pageId} not found, using default page (first page) with ID: ${targetPageId}`);
       }
-    } else {
-      server.log.info(`Using default page (first page) with ID: ${targetPageId} for captcha solving`);
     }
 
     // Check if page is valid
     if (!page) {
-      server.log.error("Selected page is invalid");
       return reply.code(500).send({
         message: "Invalid page selected for captcha solving",
         success: false,
@@ -283,10 +275,6 @@ export const handleInitiateCaptchaSolve = async (
     // --- Start asynchronous captcha solving ---
     (async () => {
       try {
-        server.log.info(
-          `Attempting to trigger and listen for captcha result on page URL: ${page.url()} for taskId: ${taskId}`,
-        );
-
         interface CaptchaResult {
           success: boolean;
           token: string;
@@ -304,7 +292,6 @@ export const handleInitiateCaptchaSolve = async (
               let timeoutId: NodeJS.Timeout | null = null;
 
               const listener = (event: CustomEvent) => {
-                console.log("[CAPTCHA-DEBUG] Received EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE event:", event.detail);
                 if (event.detail && event.detail.externalTriggerId === taskIdToSolve) {
                   if (timeoutId) clearTimeout(timeoutId);
 
@@ -312,10 +299,6 @@ export const handleInitiateCaptchaSolve = async (
                   window.removeEventListener("EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE", listener);
                   console.log(`[CAPTCHA-DEBUG] Matching result found for taskId: ${taskIdToSolve}`);
                   resolve(event.detail);
-                } else {
-                  console.log(
-                    `[CAPTCHA-DEBUG] Ignoring result for different taskId: ${event.detail?.externalTriggerId}`,
-                  );
                 }
               };
 
@@ -334,32 +317,22 @@ export const handleInitiateCaptchaSolve = async (
 
               //@ts-ignore
               window.addEventListener("EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE", listener);
-              console.log(
-                `[CAPTCHA-DEBUG] Added listener for EX_SCS_TRIGGER_MANUAL_SOLVER_RESPONSE, taskId: ${taskIdToSolve}`,
-              );
-
               // Dispatch the trigger event
               const triggerEvent = new CustomEvent("EX_SCS_TRIGGER_MANUAL_SOLVER", {
                 detail: {
                   externalTriggerId: taskIdToSolve,
                 },
               });
-              console.log(
-                `[CAPTCHA-DEBUG] Dispatching EX_SCS_TRIGGER_MANUAL_SOLVER event for taskId: ${taskIdToSolve}`,
-              );
               window.dispatchEvent(triggerEvent);
             });
           },
           taskId,
-          360000, // 6 min timeout
+          300000, // Max 5 min for timeout
         );
-
-        server.log.info(`Received captcha result for task ${taskId}: ${JSON.stringify(captchaResult)}`);
         // Update task status and resolve the promise
         server.sessionService.updateCaptchaTask(taskId, { result: captchaResult }, "success");
       } catch (error) {
         const errorMessage = getErrors(error);
-        server.log.error(`Error during captcha solve process for task ${taskId}: ${errorMessage}`);
         let status: "failed" | "timeout" = "failed";
         if (
           error instanceof Error &&
@@ -380,7 +353,6 @@ export const handleInitiateCaptchaSolve = async (
     });
   } catch (error) {
     // Catch errors during initial setup (finding page, adding task)
-    server.log.error(`Error initiating captcha solve for task ${taskId}: ${getErrors(error)}`);
     return reply.code(500).send({
       message: "Failed to initiate captcha solving process.",
       error: getErrors(error),
@@ -396,13 +368,10 @@ export const handleGetCaptchaSolvingStatus = async (
   reply: FastifyReply,
 ) => {
   const { taskId } = request.params;
-  server.log.info(`Fetching status for captcha task: ${taskId}`);
-
   try {
     const initialTaskState = server.sessionService.getCaptchaTask(taskId);
 
     if (!initialTaskState) {
-      server.log.warn(`Captcha task not found: ${taskId}`);
       return reply.code(404).send({
         success: false,
         message: "Captcha solving task not found.",
@@ -411,13 +380,11 @@ export const handleGetCaptchaSolvingStatus = async (
     }
 
     // Wait for the task's promise to resolve or reject
-    server.log.info(`Awaiting completion of captcha task: ${taskId}`);
     try {
       await initialTaskState.promise;
-      server.log.info(`Captcha task ${taskId} completed (resolved).`);
     } catch (rejection) {
       // Promise rejected (failed or timeout)
-      server.log.warn(`Captcha task ${taskId} completed (rejected): ${JSON.stringify(rejection)}`);
+      console.warn(`Captcha task ${taskId} completed (rejected): ${JSON.stringify(rejection)}`);
     }
 
     // Retrieve the final task state after the promise is settled
@@ -425,7 +392,7 @@ export const handleGetCaptchaSolvingStatus = async (
 
     if (!finalTaskState) {
       // This should ideally not happen if the task existed initially
-      server.log.error(`Captcha task ${taskId} disappeared after completion.`);
+      console.error(`Captcha task ${taskId} disappeared after completion.`);
       return reply.code(500).send({
         success: false,
         message: "Internal error: Task state lost after completion.",
@@ -450,12 +417,11 @@ export const handleGetCaptchaSolvingStatus = async (
       timeTaken: finalTaskState.timeTaken ?? null,
     };
 
-    server.log.info(`Returning final status for captcha task ${taskId}: ${JSON.stringify(response)}`);
     return reply.send(response);
   } catch (error) {
     // Catch errors related to retrieving the initial task or unexpected issues
     const errorMessage = getErrors(error);
-    server.log.error(`Error fetching status for captcha task ${taskId}: ${errorMessage}`);
+    console.error(`Error fetching status for captcha task ${taskId}: ${errorMessage}`);
     return reply.code(500).send({
       success: false,
       message: "Failed to retrieve captcha solving status.",
