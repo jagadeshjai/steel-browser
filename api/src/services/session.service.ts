@@ -45,6 +45,20 @@ const defaultSession = {
   manualSolveCaptcha: false,
 };
 
+interface CaptchaTaskState {
+  taskId: string;
+  pageId: string;
+  status: "pending" | "success" | "failed" | "timeout";
+  startTime?: number;
+  endTime?: number;
+  timeTaken?: number;
+  result?: any;
+  error?: string;
+  promise: Promise<any>;
+  resolve: (value: any) => void;
+  reject: (reason?: any) => void;
+}
+
 export class SessionService {
   private logger: FastifyBaseLogger;
   private cdpService: CDPService;
@@ -53,6 +67,7 @@ export class SessionService {
 
   public pastSessions: Session[] = [];
   public activeSession: Session;
+  private captchaTasks: Map<string, CaptchaTaskState> = new Map();
 
   constructor(config: {
     cdpService: CDPService;
@@ -234,6 +249,7 @@ export class SessionService {
     });
 
     this.pastSessions.push(releasedSession);
+    this.clearCaptchaTasks();
 
     return releasedSession;
   }
@@ -258,5 +274,91 @@ export class SessionService {
     };
 
     return this.activeSession;
+  }
+
+  /**
+   * Adds a new captcha task and sets up its promise.
+   */
+  addCaptchaTask(taskId: string, pageId: string): void {
+    let resolvePromise!: (value: any) => void;
+    let rejectPromise!: (reason?: any) => void;
+    const promise = new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+
+    const taskState: CaptchaTaskState = {
+      taskId,
+      pageId,
+      status: "pending",
+      promise,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+    };
+    this.captchaTasks.set(taskId, taskState);
+    this.logger.info(`Captcha task added: ${taskId}`);
+  }
+
+  /**
+   * Updates the status of a captcha task and resolves/rejects its promise.
+   */
+  updateCaptchaTask(
+    taskId: string,
+    data: { result?: any; error?: string },
+    finalStatus: "success" | "failed" | "timeout",
+  ): void {
+    const task = this.captchaTasks.get(taskId);
+    if (!task) {
+      this.logger.warn(`Attempted to update non-existent captcha task: ${taskId}`);
+      return;
+    }
+
+    if (task.status !== "pending") {
+      this.logger.warn(`Attempted to update already completed captcha task: ${taskId}`);
+      return; // Avoid resolving/rejecting multiple times
+    }
+
+    if (finalStatus === "success") {
+      task.status = data.result.success ? "success" : "failed";
+    } else {
+      task.status = finalStatus;
+    }
+
+    task.startTime = data.result.started_at;
+    task.endTime = data.result.ended_at;
+    task.timeTaken = data.result.time_taken;
+    task.result = data.result;
+    task.error = data.error;
+
+    this.logger.info(`Updating captcha task ${taskId} to status: ${finalStatus}`);
+
+    if (finalStatus === "success") {
+      task.resolve(task.result);
+    } else {
+      // Rejects with an object containing status and error message
+      task.reject({ status: finalStatus, message: task.error || `Task ${finalStatus}` });
+    }
+  }
+
+  /**
+   * Retrieves the state of a captcha task.
+   */
+  getCaptchaTask(taskId: string): CaptchaTaskState | undefined {
+    return this.captchaTasks.get(taskId);
+  }
+
+  /**
+   * Clears all captcha tasks, rejecting any pending ones.
+   * Should be called when the session ends.
+   */
+  clearCaptchaTasks(): void {
+    this.captchaTasks.forEach((task) => {
+      if (task.status === "pending") {
+        this.logger.warn(`Rejecting pending captcha task ${task.taskId} due to session end.`);
+        task.reject({ status: "failed", message: "Session ended before captcha task completed." });
+      }
+    });
+    this.captchaTasks.clear();
+    this.logger.info("All captcha tasks cleared.");
   }
 }

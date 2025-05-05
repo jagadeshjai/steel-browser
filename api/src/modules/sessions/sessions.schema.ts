@@ -3,6 +3,14 @@ import { z } from "zod";
 import { ScrapeRequestBody, ScreenshotRequestBody, PDFRequestBody } from "../actions/actions.schema.js";
 import { SessionContextSchema } from "../../services/context/types.js";
 
+export const captchaStatusParam = z
+  .object({
+    sessionId: z.string().uuid(),
+    taskId: z.string().uuid(),
+  })
+  .describe("Parameters for retrieving captcha solving status");
+export type CaptchaStatusParam = z.infer<typeof captchaStatusParam>;
+
 const CreateSession = z.object({
   sessionId: z.string().uuid().optional().describe("Unique identifier for the session"),
   proxyUrl: z.string().optional().describe("Proxy URL to use for the session"),
@@ -52,6 +60,7 @@ const SessionDetails = z.object({
   proxyTxBytes: z.number().int().nonnegative().describe("Amount of data transmitted through the proxy"),
   proxyRxBytes: z.number().int().nonnegative().describe("Amount of data received through the proxy"),
   solveCaptcha: z.boolean().optional().describe("Indicates if captcha solving is enabled"),
+  manualSolveCaptcha: z.boolean().optional().describe("Indicates if manual captcha solving is enabled"),
   isSelenium: z.boolean().optional().describe("Indicates if Selenium is used in the session"),
 });
 
@@ -103,10 +112,23 @@ const solveCaptchaResponse = z
   .object({
     success: z.boolean().describe("Indicates if the captcha solving was successfully initiated"),
     message: z.string().describe("Details about the captcha solving initiation"),
+    pageId: z.string().describe("ID of the page to solve the captcha on"),
     taskId: z.string().optional().describe("ID to track the asynchronous captcha solving task"),
-    pageId: z.string().optional().describe("ID of the page to solve the captcha on"),
   })
   .describe("Response for initiating an asynchronous captcha solve operation.");
+
+const CaptchaStatusResponse = z
+  .object({
+    success: z.boolean().describe("Indicates if the captcha solving task was ultimately successful"),
+    status: z.enum(["success", "failed", "timeout"]).describe("Final status of the captcha solving task"),
+    message: z.string().describe("Details about the final outcome"),
+    taskId: z.string().describe("ID of the captcha solving task"),
+    pageId: z.string().describe("ID of the page where the captcha was attempted"),
+    startedAt: z.string().datetime().describe("Timestamp when the task was initiated"),
+    endedAt: z.string().datetime().nullable().describe("Timestamp when the task completed or failed"),
+    timeTaken: z.number().nullable().describe("Duration of the task in milliseconds"),
+  })
+  .describe("Response containing the status of an asynchronous captcha solving task.");
 
 export type SessionsScrapeRequestBody = Omit<ScrapeRequestBody, "url">;
 export type SessionsScrapeRequest = FastifyRequest<{ Body: SessionsScrapeRequestBody }>;
@@ -127,6 +149,7 @@ export type SessionStreamQuery = z.infer<typeof SessionStreamQuery>;
 export type SessionStreamRequest = FastifyRequest<{ Querystring: SessionStreamQuery }>;
 
 export const browserSchemas = {
+  captchaStatusParam,
   CreateSession,
   SessionDetails,
   MultipleSessions,
@@ -137,6 +160,7 @@ export const browserSchemas = {
   SessionStreamResponse,
   SessionLiveDetailsResponse,
   solveCaptchaResponse,
+  CaptchaStatusResponse,
 };
 
 export default browserSchemas;

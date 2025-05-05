@@ -8,6 +8,7 @@ import {
   handleGetSessionStream,
   handleGetSessionLiveDetails,
   handleInitiateCaptchaSolve,
+  handleGetCaptchaSolvingStatus,
 } from "./sessions.controller.js";
 import { handleScrape, handleScreenshot, handlePDF } from "../actions/actions.controller.js";
 import { $ref } from "../../plugins/schemas.js";
@@ -197,14 +198,51 @@ async function routes(server: FastifyInstance) {
         operationId: "initiate_captcha_solve",
         description: "Initiate captcha solving for a session",
         tags: ["Sessions"],
-        summary: "Initiate captcha solving for a session and return the status",
+        summary: "Initiate captcha solving for a session",
         response: {
-          200: $ref("solveCaptchaResponse"),
+          202: $ref("solveCaptchaResponse"),
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; pageId?: string } }>, reply: FastifyReply) =>
+    async (request: FastifyRequest<{ Body: { taskId: string; pageId: string } }>, reply: FastifyReply) =>
       handleInitiateCaptchaSolve(server, request, reply),
+  );
+
+  server.get(
+    "/sessions/:sessionId/captcha-status/:taskId",
+    {
+      schema: {
+        operationId: "get_captcha_solving_status",
+        description: "Get the status of an initiated captcha solving task",
+        tags: ["Sessions"],
+        summary: "Get captcha solving status by task ID",
+        params: $ref("captchaStatusParam"),
+        response: {
+          200: $ref("CaptchaStatusResponse"),
+          404: {
+            description: "Task not found",
+            type: "object",
+            properties: {
+              success: { type: "boolean", const: false },
+              message: { type: "string" },
+              taskId: { type: "string" },
+            },
+          },
+          500: {
+            description: "Server error during status retrieval or task execution",
+            type: "object",
+            properties: {
+              success: { type: "boolean", const: false },
+              message: { type: "string" },
+              error: { type: "string" },
+              taskId: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: CaptchaStatusParam }>, reply: FastifyReply) =>
+      handleGetCaptchaSolvingStatus(server, request, reply),
   );
 
   server.post(
