@@ -34,6 +34,7 @@ const CreateSession = z.object({
     .describe("Dimensions to use for the session"),
   extra: z.record(z.string(), z.any()).optional().describe("Extra metadata to help initialize the session"),
   credentials: SessionCredentials,
+  advancedStealth: z.boolean().optional().describe("Enable advanced stealth mode for the browser session"),
 });
 
 const SessionDetails = z.object({
@@ -61,6 +62,7 @@ const SessionDetails = z.object({
   proxyRxBytes: z.number().int().nonnegative().describe("Amount of data received through the proxy"),
   solveCaptcha: z.boolean().optional().describe("Indicates if captcha solving is enabled"),
   isSelenium: z.boolean().optional().describe("Indicates if Selenium is used in the session"),
+  advancedStealth: z.boolean().optional().describe("Indicates if advanced stealth mode is enabled"),
 });
 
 const ReleaseSession = SessionDetails.merge(
