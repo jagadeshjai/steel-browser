@@ -18,6 +18,7 @@ const CreateSession = z.object({
   sessionId: z.string().uuid().optional().describe("Unique identifier for the session"),
   proxyUrl: z.string().optional().describe("Proxy URL to use for the session"),
   userAgent: z.string().optional().describe("User agent string to use for the session"),
+  solveCaptchaManually: z.boolean().optional().default(false).describe("Indicate if manual captcha solving is enabled"),
   sessionContext: SessionContextSchema.optional().describe("Session context data to be used in the created session"),
   isSelenium: z.boolean().optional().describe("Indicates if Selenium is used in the session"),
   blockAds: z.boolean().optional().describe("Flag to indicate if ads should be blocked in the session"),
@@ -60,6 +61,7 @@ const SessionDetails = z.object({
   proxyTxBytes: z.number().int().nonnegative().describe("Amount of data transmitted through the proxy"),
   proxyRxBytes: z.number().int().nonnegative().describe("Amount of data received through the proxy"),
   solveCaptcha: z.boolean().optional().describe("Indicates if captcha solving is enabled"),
+  solveCaptchaManually: z.boolean().optional().describe("Indicates if manual captcha solving is enabled"),
   isSelenium: z.boolean().optional().describe("Indicates if Selenium is used in the session"),
 });
 

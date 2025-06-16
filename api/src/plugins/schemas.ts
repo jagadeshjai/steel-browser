@@ -3,16 +3,23 @@ import fp from "fastify-plugin";
 import fastifySwagger from "@fastify/swagger";
 import fastifyScalar from "@scalar/fastify-api-reference";
 import { titleCase } from "../utils/text.js";
+import { buildJsonSchemas } from "../utils/schema.js";
+import { getBaseUrl } from "../utils/url.js";
+import scalarTheme from "./scalar-theme.js";
+
+// Module schemas
 import actionSchemas from "../modules/actions/actions.schema.js";
 import cdpSchemas from "../modules/cdp/cdp.schemas.js";
 import browserSchemas from "../modules/sessions/sessions.schema.js";
 import seleniumSchemas from "../modules/selenium/selenium.schema.js";
-import scalarTheme from "./scalar-theme.js";
-import { buildJsonSchemas } from "../utils/schema.js";
 import filesSchemas from "../modules/files/files.schema.js";
-import { getBaseUrl } from "../utils/url.js";
 
-const SCHEMAS = {
+export interface SteelBrowserSchemaOptions {
+  additionalSchemas?: any;
+}
+
+// Core schemas that are always included
+const CORE_SCHEMAS = {
   ...actionSchemas,
   ...browserSchemas,
   ...cdpSchemas,
@@ -20,13 +27,27 @@ const SCHEMAS = {
   ...filesSchemas,
 };
 
-export const { schemas, $ref } = buildJsonSchemas(SCHEMAS);
+/**
+ * Plugin that registers schemas for Steel Browser and sets up Swagger documentation
+ */
+const schemaPlugin: FastifyPluginAsync<SteelBrowserSchemaOptions> = async (fastify, opts) => {
+  const combinedSchemas = {
+    ...CORE_SCHEMAS,
+    ...(opts.additionalSchemas || {}),
+  };
 
-const schemaPlugin: FastifyPluginAsync = async (fastify) => {
-  for (const schema of schemas) {
+  const { schemas: allRegisteredSchemas, $ref } = buildJsonSchemas(combinedSchemas);
+
+  if (!fastify.hasDecorator("$ref")) {
+    fastify.decorate("$ref", $ref);
+  }
+
+  // Register all schemas with Fastify
+  for (const schema of allRegisteredSchemas) {
     fastify.addSchema(schema);
   }
 
+  // Setup Swagger documentation
   await fastify.register(fastifySwagger, {
     openapi: {
       info: {
@@ -52,7 +73,8 @@ const schemaPlugin: FastifyPluginAsync = async (fastify) => {
     },
   });
 
-  await fastify.register(fastifyScalar as any, { // scalar still uses fastify v4
+  await fastify.register(fastifyScalar as any, {
+    // scalar still uses fastify v4
     routePrefix: "/documentation",
     configuration: {
       customCss: scalarTheme,
@@ -60,4 +82,6 @@ const schemaPlugin: FastifyPluginAsync = async (fastify) => {
   });
 };
 
-export default fp(schemaPlugin);
+// Export the plugin and reference function
+export const { schemas, $ref } = buildJsonSchemas(CORE_SCHEMAS);
+export default fp(schemaPlugin, { name: "steel-schema-plugin" });

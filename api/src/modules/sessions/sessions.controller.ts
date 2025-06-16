@@ -24,6 +24,7 @@ export const handleLaunchBrowserSession = async (
       blockAds,
       extra,
       credentials,
+      solveCaptchaManually,
     } = request.body;
 
     return await server.sessionService.startSession({
@@ -42,6 +43,7 @@ export const handleLaunchBrowserSession = async (
       blockAds,
       extra,
       credentials,
+      solveCaptchaManually,
     });
   } catch (e: unknown) {
     server.log.error("Failed lauching browser session", e);

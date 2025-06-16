@@ -52,6 +52,7 @@ export class CDPService extends EventEmitter {
   private chromeSessionService: ChromeContextService;
 
   private launchMutators: ((config: BrowserLauncherOptions) => Promise<void> | void)[] = [];
+  private afterLaunchMutators: ((config: BrowserLauncherOptions) => Promise<void> | void)[] = [];
   private shutdownMutators: ((config: BrowserLauncherOptions | null) => Promise<void> | void)[] = [];
 
   constructor(config: { keepAlive?: boolean }, logger: FastifyBaseLogger) {
@@ -96,6 +97,10 @@ export class CDPService extends EventEmitter {
 
   public registerLaunchHook(fn: (config: BrowserLauncherOptions) => Promise<void> | void) {
     this.launchMutators.push(fn);
+  }
+
+  public registerAfterLaunchHook(fn: (config: BrowserLauncherOptions) => Promise<void> | void) {
+    this.afterLaunchMutators.push(fn);
   }
 
   public registerShutdownHook(fn: (config: BrowserLauncherOptions | null) => Promise<void> | void) {
@@ -654,6 +659,11 @@ export class CDPService extends EventEmitter {
 
         await this.handleNewTarget(this.primaryPage.target());
         await this.handleTargetChange(this.primaryPage.target());
+
+        // Execute afterLaunchMutators
+        for (const mutator of this.afterLaunchMutators) {
+          await mutator(this.launchConfig);
+        }
 
         return this.browserInstance;
       })();
