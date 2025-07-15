@@ -407,7 +407,11 @@ export class CDPService extends EventEmitter {
         this.customEmit(EmitEvent.Log, {
           type: BrowserEventType.PageError,
           text: err
-            ? JSON.stringify({ pageId, message: err.message, name: err.name })
+            ? JSON.stringify({
+                pageId,
+                message: err.message + "  stack trace: " + err?.stack || "No stack trace available",
+                name: err.name,
+              })
             : "Unknown page error",
           timestamp: new Date(),
         });
