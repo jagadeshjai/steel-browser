@@ -873,7 +873,7 @@ export class CDPService extends EventEmitter {
             this.launchConfig.dimensions?.height ?? 1080
           }`,
           `--timezone=${timezone}`,
-          userAgent ? `--user-agent=${userAgent}` : "",
+          // userAgent ? `--user-agent=${userAgent}` : "",
           this.launchConfig.options.proxyUrl
             ? `--proxy-server=${this.launchConfig.options.proxyUrl}`
             : "",
@@ -1352,7 +1352,7 @@ export class CDPService extends EventEmitter {
       const userAgentMetadata = fingerprint.navigator.userAgentData;
       const { screen } = fingerprint;
 
-      await page.setUserAgent(userAgent);
+      // await page.setUserAgent(userAgent);
 
       const session = await page.createCDPSession();
 
@@ -1385,25 +1385,25 @@ export class CDPService extends EventEmitter {
 
         await session.send("Emulation.clearDeviceMetricsOverride");
 
-        await session.send("Emulation.setUserAgentOverride", {
-          userAgent: userAgent,
-          acceptLanguage: headers["accept-language"],
-          platform: fingerprint.navigator.platform || "Linux x86_64",
-          userAgentMetadata: {
-            brands:
-              userAgentMetadata.brands as unknown as Protocol.Emulation.UserAgentMetadata["brands"],
-            fullVersionList:
-              userAgentMetadata.fullVersionList as unknown as Protocol.Emulation.UserAgentMetadata["fullVersionList"],
-            fullVersion: userAgentMetadata.uaFullVersion,
-            platform: fingerprint.navigator.platform || "Linux x86_64",
-            platformVersion: userAgentMetadata.platformVersion || "",
-            architecture: userAgentMetadata.architecture || "x86",
-            model: userAgentMetadata.model || "",
-            mobile: userAgentMetadata.mobile as unknown as boolean,
-            bitness: userAgentMetadata.bitness || "64",
-            wow64: false, // wow64 property doesn't exist on UserAgentData, defaulting to false
-          },
-        });
+        // await session.send("Emulation.setUserAgentOverride", {
+        //   userAgent: userAgent,
+        //   acceptLanguage: headers["accept-language"],
+        //   platform: fingerprint.navigator.platform || "Linux x86_64",
+        //   userAgentMetadata: {
+        //     brands:
+        //       userAgentMetadata.brands as unknown as Protocol.Emulation.UserAgentMetadata["brands"],
+        //     fullVersionList:
+        //       userAgentMetadata.fullVersionList as unknown as Protocol.Emulation.UserAgentMetadata["fullVersionList"],
+        //     fullVersion: userAgentMetadata.uaFullVersion,
+        //     platform: fingerprint.navigator.platform || "Linux x86_64",
+        //     platformVersion: userAgentMetadata.platformVersion || "",
+        //     architecture: userAgentMetadata.architecture || "x86",
+        //     model: userAgentMetadata.model || "",
+        //     mobile: userAgentMetadata.mobile as unknown as boolean,
+        //     bitness: userAgentMetadata.bitness || "64",
+        //     wow64: false, // wow64 property doesn't exist on UserAgentData, defaulting to false
+        //   },
+        // });
       } finally {
         // Always detach the session when done
         await session.detach().catch(() => {});

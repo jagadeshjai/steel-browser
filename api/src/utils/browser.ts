@@ -127,6 +127,8 @@ export function filterHeaders(headers: Record<string, string>) {
     "sec-fetch-site",
     "sec-fetch-user",
     "upgrade-insecure-requests",
+    "sec-ch-ua",
+    "user-agent",
   ];
   const filteredHeaders = { ...headers };
   headersToRemove.forEach((header) => {
