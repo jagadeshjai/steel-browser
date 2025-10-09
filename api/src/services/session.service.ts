@@ -130,13 +130,16 @@ export class SessionService {
         env.DEFAULT_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone,
       );
     }
+    // If dimensions not provided, get from launch config or default
+    const launchConfig = this.cdpService.getLaunchConfig();
+    const finalDimensions = dimensions || launchConfig?.dimensions || { width: 1920, height: 1080 };
 
     await this.resetSessionInfo({
       id: sessionId || uuidv4(),
       status: "live",
       proxy: proxyUrl,
       solveCaptcha: false,
-      dimensions,
+      dimensions: finalDimensions,
       isSelenium,
     });
 
