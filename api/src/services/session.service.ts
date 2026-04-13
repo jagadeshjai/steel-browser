@@ -179,12 +179,7 @@ export class SessionService {
         : env.CHROME_USER_DATA_DIR || path.join(os.tmpdir(), "steel-chrome");
     await mkdir(userDataDir, { recursive: true });
 
-    const defaultUserPreferences = {
-      plugins: {
-        always_open_pdf_externally: true,
-        plugins_disabled: ["Chrome PDF Viewer"],
-      },
-    };
+    const defaultUserPreferences = {};
 
     const mergedUserPreferences = userPreferences
       ? deepMerge(defaultUserPreferences, userPreferences)

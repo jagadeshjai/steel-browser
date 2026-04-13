@@ -157,12 +157,7 @@ export class CDPService extends EventEmitter {
       extensions: [],
       userDataDir: env.CHROME_USER_DATA_DIR || path.join(os.tmpdir(), "steel-chrome"),
       timezone: coldStartTimezone,
-      userPreferences: {
-        plugins: {
-          always_open_pdf_externally: true,
-          plugins_disabled: ["Chrome PDF Viewer"],
-        },
-      },
+      userPreferences: {},
       deviceConfig: { device: "desktop" },
     };
 
