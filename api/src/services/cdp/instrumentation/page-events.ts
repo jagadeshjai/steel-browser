@@ -191,12 +191,15 @@ export async function attachPageEvents(
   });
 
   page.on("pageerror", (err) => {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+
     logger.record({
       type: BrowserEventType.PageError,
       timestamp: new Date().toISOString(),
       pageId,
       targetType,
-      error: { message: err?.message, stack: err?.stack },
+      error: { message: errorMessage, stack: errorStack },
     });
   });
 }
